@@ -1,0 +1,92 @@
+---
+title: "Análise exploratória"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+require(tidyverse)
+require(patchwork)
+require(data.table)
+
+
+verde_picpay <- '#21C25E' 
+cinza_claro <- '#F5F5F5'
+cinza_escuro <- '#3A3A3A'
+```
+
+```{r}
+dados <- readRDS('data/processed/base_modelo.RDS')
+```
+
+
+
+
+## Volumetria e BadRate geral
+
+```{r}
+
+dados[,.(.N, BadRate = mean(y))]
+
+```
+
+BadRate alta!
+
+## Volumetria e Bad Rate por safra
+
+```{r}
+tbl <- dados[,.(.N, BadRate = mean(y)), safra]
+
+  ggplot(tbl,aes(x = safra, y = BadRate))+
+    geom_line(col = cinza_escuro, size =1)+
+    geom_point(col = verde_picpay, size = 2)+
+    scale_y_continuous(limits = c(0,1))+
+    theme_minimal()+
+  ggplot(tbl,aes(x = safra, y = N))+
+    geom_col(fill = cinza_escuro)+
+    theme_minimal()+
+    plot_layout(nrow = 2,heights = c(3,1))
+  
+```
+
+Inadimplência maior nos períodos de início e fim de ano.
+
+
+## Summary 
+
+```{r}
+summary(dados)
+```
+
+Quase todas as variáveis possuem valores ausentes. Será necessário o tratamento posterior.
+
+Var_64 é uma flag
+
+
+## Boxplot variavel x target
+
+```{r}
+feats <- names(dados)[names(dados)%like% 'VAR']
+
+xx <- map(feats,~{
+  c <- copy(dados)
+  setnames(c,old= .x,'feat')
+  print(.x)
+  ggplot(c,aes(feat, fill = factor(y)))+
+    geom_boxplot()+
+    labs(x = .x)+
+    theme_minimal()+
+    scale_fill_manual(values=c(cinza_claro,verde_picpay))+
+      ggplot(c,aes(y = feat))+
+    geom_boxplot()+
+    labs(x = .x)+
+    theme_minimal()
+})
+
+names(xx) <- feats
+
+xx
+
+```
+
+- VAR_6 tem outlier
