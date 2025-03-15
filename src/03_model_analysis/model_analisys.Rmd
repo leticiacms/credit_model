@@ -1,0 +1,103 @@
+---
+title: "Análise modelo"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+require(tidyverse)
+require(patchwork)
+require(data.table)
+
+
+verde <- '#21C25E' 
+cinza_claro <- '#F5F5F5'
+cinza_escuro <- '#3A3A3A'
+```
+
+```{r}
+dados <- readRDS('data/processed/treino_teste_oot.RDS')
+xgb1 <- readRDS('models/xgb1.RDS')
+
+
+setnafill(dados, fill = -500,cols = setdiff(names(dados), 'sample'))
+
+dados <- dados[sample!= 'treino']
+
+```
+
+
+
+## KS e AUC
+
+```{r}
+
+
+dados[,pred_xgb1 := predict(xgb1,.SD,type = 'prob')$inad]
+dados[, .(AUC = MLmetrics::AUC(y_pred = pred_xgb1,
+                       y_true = y),
+          KS = MLmetrics::KS_Stat(y_pred = pred_xgb1,
+                       y_true = y)) , sample]
+
+
+
+dados[, .(KS = MLmetrics::KS_Stat(y_pred = pred_xgb1,
+                       y_true = y),
+          AUC =MLmetrics::AUC(y_pred = pred_xgb1,
+                       y_true = y) ),keyby =.(sample, safra)] %>% melt(id.var = c('safra', 'sample'),variable.name = 'Metrica', value.name = 'Valor') %>% 
+  ggplot(aes(x = safra, y = Valor, linetype = Metrica, col = sample ))+
+  geom_line()+ 
+  geom_point()+
+  theme_minimal()+
+  facet_grid(Metrica~.,scales = 'free')+
+  scale_color_manual(values = c(verde,cinza_escuro))
+
+
+
+```
+
+
+
+
+## features
+
+```{r}
+require(caret)
+
+varImp(xgb1,scale = F) %>% plot
+
+```
+
+
+
+## Decis
+
+```{r}
+decis <- quantile(dados[ , pred_xgb1],seq(0,1,.1))[-1]
+
+dados[,grupo:= cut(pred_xgb1,c(0,decis), include.lowest=T)]
+
+yy <- dados[,.(BadRate = mean(y),.N, Bad = sum(y)),keyby = grupo]
+
+yy[, Bad_acum := cumsum(Bad)]
+yy[, N_acum := cumsum(N)]
+
+yy[, BadRateAcum:= Bad_acum/N_acum]
+
+
+ggplot(yy, aes(x = grupo, y = BadRate))+
+  geom_col(fill = cinza_claro)+
+  geom_line(aes(y=BadRateAcum , group=1))+
+  geom_point(aes(y=BadRateAcum , group=1), col = verde)+
+  geom_label(aes(label = scales::percent(BadRateAcum,.1),
+             y =BadRateAcum ), fill = verde)+
+  theme_classic()
+
+
+```
+

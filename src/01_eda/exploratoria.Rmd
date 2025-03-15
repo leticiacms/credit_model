@@ -1,6 +1,9 @@
 ---
 title: "Análise exploratória"
-output: html_document
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -10,7 +13,7 @@ require(patchwork)
 require(data.table)
 
 
-verde_picpay <- '#21C25E' 
+verde <- '#21C25E' 
 cinza_claro <- '#F5F5F5'
 cinza_escuro <- '#3A3A3A'
 ```
@@ -39,7 +42,7 @@ tbl <- dados[,.(.N, BadRate = mean(y)), safra]
 
   ggplot(tbl,aes(x = safra, y = BadRate))+
     geom_line(col = cinza_escuro, size =1)+
-    geom_point(col = verde_picpay, size = 2)+
+    geom_point(col = verde, size = 2)+
     scale_y_continuous(limits = c(0,1))+
     theme_minimal()+
   ggplot(tbl,aes(x = safra, y = N))+
@@ -71,12 +74,12 @@ feats <- names(dados)[names(dados)%like% 'VAR']
 xx <- map(feats,~{
   c <- copy(dados)
   setnames(c,old= .x,'feat')
-  print(.x)
+  #print(.x)
   ggplot(c,aes(feat, fill = factor(y)))+
     geom_boxplot()+
     labs(x = .x)+
     theme_minimal()+
-    scale_fill_manual(values=c(cinza_claro,verde_picpay))+
+    scale_fill_manual(values=c(cinza_claro,verde))+
       ggplot(c,aes(y = feat))+
     geom_boxplot()+
     labs(x = .x)+
@@ -90,3 +93,116 @@ xx
 ```
 
 - VAR_6 tem outlier
+
+
+## Estabilidade das features
+
+Verifica PSI da feature em relação a m-1
+
+```{r}
+safras <- dados[,sort(unique(safra))]
+
+calculate_psi <- function(actual, predicted, bucket_count = 10) {
+  
+  breaks <- quantile(predicted, probs = seq(0, 1, length.out = bucket_count + 1), na.rm = TRUE) %>% unique
+  
+  actual_freq <- table(cut(actual, breaks = breaks, include.lowest = TRUE, right = FALSE))
+  predicted_freq <- table(cut(predicted, breaks = breaks, include.lowest = TRUE, right = FALSE))
+  
+  actual_prop <- actual_freq / sum(actual_freq)
+  predicted_prop <- predicted_freq / sum(predicted_freq)
+  
+  psi_values <- (actual_prop - predicted_prop) * log(actual_prop / predicted_prop)
+  
+  return(sum(psi_values, na.rm = TRUE))
+}
+
+#setnafill(dados, fill = -500)
+
+psis <- map2(
+  rep(feats,each=length(safras)-1),
+  rep(2:length(safras), length(feats)),~{
+  s0 <- safras[.y]
+  s1 <- safras[.y-1]
+  
+ # print(paste(.x,'|', s0 ))
+  
+  xx <- calculate_psi(dados[safra<=s1,.x, with =F][[1]],
+                 dados[safra==s0,.x, with =F][[1]])
+  
+ # print(xx)
+  
+  data.table(feat=.x, data = s0, psi =xx)
+  }
+  
+)
+
+psis <- rbindlist(psis)
+
+psis[is.infinite(psi), psi:=1]
+
+psis[,as.list(summary(psi)), feat]
+
+psis[,psi_cat:= cut(psi,c(0,.1,.2,1),c('0.Sem dif','1.Alerta', '2.Dif sig'),include.lowest = T)]
+
+ggplot(psis, aes(x = data, y=feat, fill = psi_cat))+
+  geom_tile()+
+  scale_fill_brewer(palette = 'green')+
+  theme_classic()
+  
+
+```
+
+
+
+Variáveis com PSI >.2
+
+```{r}
+psis[psi>.2]
+
+```
+
+
+VAR_27
+
+```{r}
+dados[!is.na(VAR_27), as.list(summary(VAR_27)),keyby =  safra]
+
+
+```
+
+VAR_30
+
+```{r}
+dados[!is.na(VAR_30), as.list(summary(VAR_30)),keyby =  safra]
+
+
+```
+
+VAR_53
+
+```{r}
+dados[, as.list(summary(VAR_53)),keyby =  safra]
+
+
+```
+
+
+VAR_72
+
+```{r}
+dados[, as.list(summary(VAR_72)),keyby =  safra]
+
+
+```
+
+
+
+```{r}
+
+
+
+  
+
+```
+
